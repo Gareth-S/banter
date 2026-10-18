@@ -39,6 +39,23 @@ let editMode = false;
 // Keeping this lets us destroy it when leaving Edit mode.
 let categorySorter = null;
 
+// --------------------------------------------------
+// Phrase editing state
+// --------------------------------------------------
+
+// The category currently open on the phrase screen.
+let activeCategory = null;
+
+// The phrases currently displayed, in their current order.
+let activePhrases = [];
+
+// Reference to the active phrase drag-and-drop instance.
+let phraseSorter = null;
+
+
+// Which screen is currently displayed: "home" or "phrases".
+let currentScreen = "home";
+
 
 // --------------------------------------------------
 // Load category data
@@ -115,6 +132,48 @@ async function saveCategoryOrder() {
     }
 }
 
+// --------------------------------------------------
+// Save phrase order
+// --------------------------------------------------
+
+async function savePhraseOrder() {
+    // Nothing to save if no category is open.
+    if (!activeCategory) {
+        saveMessage = "No active category to save.";
+        return false;
+    }
+
+    try {
+        const response = await fetch("assets/save-phrases.php", {
+            method: "POST",
+
+            headers: {
+                "Content-Type": "application/json",
+                "X-Banter-Token": window.BANTER_SAVE_TOKEN
+            },
+
+            // Send the category ID and phrase IDs in displayed order.
+            // The server preserves the existing phrase text and IDs.
+            body: JSON.stringify({
+                categoryId: activeCategory.id,
+                phraseIds: activePhrases.map(phrase => phrase.id)
+            })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || `HTTP ${response.status}`);
+        }
+
+        return true;
+
+    } catch (error) {
+        console.error("Banter: phrase order save failed", error);
+        saveMessage = "Unable to save phrase order. Please try again.";
+        return false;
+    }
+}
 
 
 
@@ -129,35 +188,51 @@ function setEditMode(enabled) {
     // CSS uses this class to change the appearance in Edit mode.
     document.body.classList.toggle("editing", editMode);
 
-    // Rebuild the home screen to match the selected mode.
-    showHome();
+    // Rebuild whichever screen is currently open.
+    if (currentScreen === "phrases" && activeCategory) {
+        showPhrases(activeCategory);
+    } else {
+        showHome();
+    }
 }
+
 
 // Entering Edit mode is immediate.
 // Saving when leaving Edit mode will be added in the next step.
 
+
 editModeBtn.addEventListener("click", async () => {
-    // Entering Edit mode does not require a save.
+    // Entering Edit mode is immediate; nothing needs saving yet.
     if (!editMode) {
         saveMessage = "";
         setEditMode(true);
         return;
     }
 
+    // Remember which screen we are saving before changing modes.
+    const savingPhrases = currentScreen === "phrases";
+
     // Prevent repeated clicks while the save is in progress.
     editModeBtn.disabled = true;
     editModeBtn.textContent = "Saving...";
 
-    const saved = await saveCategoryOrder();
+    // Save the order belonging to the screen currently being edited.
+    const saved = savingPhrases
+        ? await savePhraseOrder()
+        : await saveCategoryOrder();
 
     editModeBtn.disabled = false;
 
     if (saved) {
-        // A successful save commits the new order.
-        saveMessage = "Category order saved.";
+        // Report which order was saved successfully.
+        saveMessage = savingPhrases
+            ? "Phrase order saved."
+            : "Category order saved.";
+
+        // Return to performance mode on the same screen.
         setEditMode(false);
     } else {
-        // A failed save keeps the reordered list and Edit mode.
+        // Keep Edit mode and the current order if saving fails.
         setEditMode(true);
     }
 });
@@ -169,6 +244,7 @@ editModeBtn.addEventListener("click", async () => {
 
 function showHome() {
     // Remove the previous screen and any old category buttons.
+    currentScreen = "home";
     app.replaceChildren();
 
     // Clear any previous SortableJS instance before rebuilding.
@@ -263,8 +339,19 @@ function showHome() {
 // Phrase screen
 // --------------------------------------------------
 
+
 async function showPhrases(category) {
-    // Remove the category screen.
+    // Remember which category is open.
+    currentScreen = "phrases";
+    activeCategory = category;
+
+    // Remove any previous phrase drag-and-drop instance.
+    if (phraseSorter) {
+        phraseSorter.destroy();
+        phraseSorter = null;
+    }
+
+    // Remove the previous screen.
     app.replaceChildren();
 
     // Provide a way back to the category home screen.
@@ -291,9 +378,14 @@ async function showPhrases(category) {
             throw new Error(`HTTP ${response.status}`);
         }
 
-        const phrases = await response.json();
+        // Keep a separate in-memory list so dragging can reorder it.
+        activePhrases = await response.json();
 
-        phrases.forEach(phrase => {
+        // Use a dedicated container for the phrase buttons.
+        const phraseList = document.createElement("div");
+        phraseList.id = "phraseList";
+
+        activePhrases.forEach(phrase => {
             const button = document.createElement("button");
 
             button.type = "button";
@@ -301,7 +393,7 @@ async function showPhrases(category) {
             button.textContent = phrase.text;
 
             if (editMode) {
-                // Styling only for now; phrase editing comes later.
+                // Dashed styling identifies phrases that can be reordered.
                 button.classList.add("editable");
 
             } else if (usedPhrases.has(phrase.id)) {
@@ -309,6 +401,9 @@ async function showPhrases(category) {
                 button.classList.add("used");
                 button.disabled = true;
             }
+
+            // Keep each phrase's stable ID attached to its button.
+            button.dataset.phraseId = phrase.id;
 
             button.addEventListener("click", () => {
                 // Never mark phrases as used while editing.
@@ -321,8 +416,39 @@ async function showPhrases(category) {
                 showHome();
             });
 
-            app.appendChild(button);
+            phraseList.appendChild(button);
         });
+
+        app.appendChild(phraseList);
+
+        // Dragging is enabled only while editing.
+        if (editMode && typeof Sortable !== "undefined") {
+            phraseSorter = Sortable.create(phraseList, {
+                animation: 150,
+
+                // Do not drag disabled buttons or buttons that aren't editable.
+                draggable: ".phrase.editable",
+
+                // Copy the new displayed order into our in-memory phrase list.
+                onEnd: () => {
+                    const reorderedPhrases = [];
+
+                    phraseList.querySelectorAll(".phrase").forEach(button => {
+                        const phrase = activePhrases.find(
+                            item => item.id === button.dataset.phraseId
+                        );
+
+                        if (phrase) {
+                            reorderedPhrases.push(phrase);
+                        }
+                    });
+
+                    activePhrases = reorderedPhrases;
+
+                    // Saving will be connected in the next step.
+                }
+            });
+        }
 
     } catch (error) {
         console.error("Banter:", error);
@@ -334,6 +460,7 @@ async function showPhrases(category) {
         app.appendChild(message);
     }
 }
+
 
 
 // --------------------------------------------------
