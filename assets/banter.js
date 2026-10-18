@@ -603,6 +603,26 @@ async function showPhrases(category) {
         });
 
         app.appendChild(phraseList);
+        
+        
+
+        // In Edit mode, offer a button to add a new phrase.
+        if (editMode) {
+            const addPhraseBtn = document.createElement("button");
+
+            addPhraseBtn.type = "button";
+            addPhraseBtn.textContent = "+ Add phrase";
+            addPhraseBtn.id = "addPhraseBtn";
+
+            addPhraseBtn.addEventListener("click", () => {
+                // Open the draft editor for this category.
+                showNewPhraseForm(category);
+            });
+
+            app.appendChild(addPhraseBtn);
+        }
+
+        
 
         // Dragging is enabled only while editing.
         if (editMode && typeof Sortable !== "undefined") {
@@ -642,6 +662,118 @@ async function showPhrases(category) {
 
         app.appendChild(message);
     }
+}
+
+
+/*
+ * Show the editor for a new phrase.
+ *
+ * The phrase remains a draft until Save phrase is pressed.
+ * Discard phrase simply returns to the category's phrase list.
+ */
+function showNewPhraseForm(category) {
+    // Remember which category and screen are active.
+    currentScreen = "phrases";
+    activeCategory = category;
+
+    // Remove the existing screen before building the editor.
+    app.replaceChildren();
+
+    // Keep the category heading visible.
+    const heading = document.createElement("h2");
+    heading.textContent = category.name;
+    app.appendChild(heading);
+
+    // Explain what the user is editing.
+    const label = document.createElement("label");
+    label.htmlFor = "newPhraseText";
+    label.textContent = "New phrase";
+    app.appendChild(label);
+
+    // The draft is not sent to the server until it is saved.
+    const textarea = document.createElement("textarea");
+    textarea.id = "newPhraseText";
+    textarea.rows = 5;
+    textarea.maxLength = 2000;
+    textarea.placeholder = "Type the new phrase here...";
+    textarea.setAttribute("aria-label", "New phrase text");
+    app.appendChild(textarea);
+
+    // Display messages here without leaving the editor.
+    const status = document.createElement("p");
+    status.id = "newPhraseStatus";
+    status.setAttribute("role", "status");
+    app.appendChild(status);
+
+    // Save the phrase to the server.
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.textContent = "Save phrase";
+
+    saveBtn.addEventListener("click", async () => {
+        const phraseText = textarea.value.trim();
+
+        if (!phraseText) {
+            status.textContent = "Please enter some phrase text first.";
+            textarea.focus();
+            return;
+        }
+
+        // Prevent duplicate submissions while the save is in progress.
+        saveBtn.disabled = true;
+        discardBtn.disabled = true;
+        status.textContent = "Saving phrase...";
+
+        try {
+            const response = await fetch("assets/save-new-phrase.php", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Banter-Token": window.BANTER_SAVE_TOKEN
+                },
+                body: JSON.stringify({
+                    categoryId: category.id,
+                    text: phraseText
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || !result.ok) {
+                throw new Error(
+                    result.error || `HTTP ${response.status}`
+                );
+            }
+
+            // Reload the phrase list so the newly saved phrase appears.
+            await showPhrases(category);
+
+        } catch (error) {
+            console.error("Banter: new phrase save failed", error);
+
+            status.textContent =
+                "Unable to save the phrase. Please try again.";
+
+            saveBtn.disabled = false;
+            discardBtn.disabled = false;
+        }
+    });
+
+    app.appendChild(saveBtn);
+
+    // Discard the unsaved draft without changing the JSON file.
+    const discardBtn = document.createElement("button");
+    discardBtn.type = "button";
+    discardBtn.textContent = "Discard phrase";
+
+    discardBtn.addEventListener("click", () => {
+        showPhrases(category);
+    });
+
+    app.appendChild(discardBtn);
+
+    // Put the cursor in the new editor immediately.
+    textarea.focus();
 }
 
 

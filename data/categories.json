@@ -6,10 +6,10 @@
         "file": "birthdays.json"
     },
     {
-        "id": "05",
-        "desc": "just a test",
-        "name": "zz-test",
-        "file": "zz-test.json"
+        "id": "04",
+        "desc": "for announcements",
+        "name": "Announcements",
+        "file": "announcements.json"
     },
     {
         "id": "02",
@@ -18,10 +18,10 @@
         "file": "change-guitar.json"
     },
     {
-        "id": "04",
-        "desc": "for announcements",
-        "name": "Announcements",
-        "file": "announcements.json"
+        "id": "05",
+        "desc": "just a test",
+        "name": "zz-test",
+        "file": "zz-test.json"
     },
     {
         "id": "01",
