@@ -1,0 +1,5 @@
+# Local backups
+backups/
+
+# Local preferences and machine-specific settings
+data/settings.json

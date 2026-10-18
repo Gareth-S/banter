@@ -1,0 +1,23 @@
+
+[
+    {
+        "id": "between-songs",
+        "name": "Between songs",
+        "file": "between-songs.json"
+    },
+    {
+        "id": "change-guitar",
+        "name": "Change guitar",
+        "file": "change-guitar.json"
+    },
+    {
+        "id": "birthdays",
+        "name": "Birthdays",
+        "file": "birthdays.json"
+    },
+    {
+        "id": "announcements",
+        "name": "Announcements",
+        "file": "announcements.json"
+    }
+]
