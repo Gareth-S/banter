@@ -59,6 +59,9 @@ let currentScreen = "home";
 // ID of the phrase currently being edited, or null when none is.
 let editingPhraseId = null;
 
+// Original phrase ID order when the category was loaded.
+let originalPhraseOrder = [];
+
 
 // --------------------------------------------------
 // Load category data
@@ -578,14 +581,52 @@ async function showPhrases(category) {
     // Remove the previous screen.
     app.replaceChildren();
 
+
+
+
     // Provide a way back to the category home screen.
     const backButton = document.createElement("button");
     backButton.type = "button";
     backButton.textContent = "← Home";
-    backButton.addEventListener("click", showHome);
+
+    backButton.addEventListener("click", () => {
+        // Check whether the phrase order differs from the saved order
+        // that was loaded when this category was opened.
+        const orderChanged =
+            activePhrases.length !== originalPhraseOrder.length ||
+            activePhrases.some(
+                (phrase, index) => phrase.id !== originalPhraseOrder[index]
+            );
+
+        // An unsaved text edit takes priority in the confirmation.
+        if (editingPhraseId !== null) {
+            const confirmed = window.confirm(
+                "Discard your unsaved phrase changes and return home?"
+            );
+
+            if (!confirmed) {
+                return;
+            }
+
+            editingPhraseId = null;
+        } else if (editMode && orderChanged) {
+            // Confirm if the phrase order has changed in Edit mode.
+            const confirmed = window.confirm(
+                "Discard your unsaved phrase order and return home?"
+            );
+
+            if (!confirmed) {
+                return;
+            }
+        }
+
+        showHome();
+    });
 
     app.appendChild(backButton);
 
+    
+    
     // Show the category name as the heading.
     const heading = document.createElement("h2");
     heading.textContent = editMode
@@ -606,6 +647,9 @@ async function showPhrases(category) {
 
         // Keep a separate in-memory list so dragging can reorder it.
         activePhrases = await response.json();
+        
+        // Keep a separate copy so we can detect unsaved reordering.
+        originalPhraseOrder = activePhrases.map(phrase => phrase.id);
 
         // Use a dedicated container for the phrase items.
         const phraseList = document.createElement("div");

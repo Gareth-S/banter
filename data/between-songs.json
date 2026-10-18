@@ -1,14 +1,14 @@
 [
     {
+        "id": "bs-002",
+        "text": "Thanks for spending some of your evening with us."
+    },
+    {
         "id": "bs-003",
         "text": "We're going to keep the music coming @ you!"
     },
     {
         "id": "bs-001",
         "text": "How's everybody doing tonight?"
-    },
-    {
-        "id": "bs-002",
-        "text": "Thanks for spending some of your evening with us."
     }
 ]

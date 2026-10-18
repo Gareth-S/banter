@@ -1,11 +1,11 @@
 [
     {
-        "id": "cg-002",
-        "text": "This next one needs a slightly different sound."
-    },
-    {
         "id": "cg-001",
         "text": "Give me a moment while I change my guitars!"
+    },
+    {
+        "id": "cg-002",
+        "text": "This next one needs a slightly different sound."
     },
     {
         "id": "cg-003",
