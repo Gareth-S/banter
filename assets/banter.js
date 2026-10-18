@@ -56,6 +56,9 @@ let phraseSorter = null;
 // Which screen is currently displayed: "home" or "phrases".
 let currentScreen = "home";
 
+// ID of the phrase currently being edited, or null when none is.
+let editingPhraseId = null;
+
 
 // --------------------------------------------------
 // Load category data
@@ -174,6 +177,44 @@ async function savePhraseOrder() {
         return false;
     }
 }
+
+
+
+/*
+ * Save the edited text of an existing phrase.
+ *
+ * The server updates the text while preserving the phrase's ID
+ * and its position in the category's JSON file.
+ */
+async function savePhraseText(category, phraseId, text) {
+    try {
+        const response = await fetch("assets/save-phrase-txt.php", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Banter-Token": window.BANTER_SAVE_TOKEN
+            },
+            body: JSON.stringify({
+                categoryId: category.id,
+                phraseId: phraseId,
+                text: text
+            })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || `HTTP ${response.status}`);
+        }
+
+        return true;
+
+    } catch (error) {
+        console.error("Banter: phrase text save failed", error);
+        return false;
+    }
+}
+
 
 
 
@@ -555,7 +596,9 @@ async function showPhrases(category) {
 
     try {
         // Each category stores its phrases in its own JSON file.
-        const response = await fetch(`data/${category.file}`);
+        const response = await fetch(`data/${category.file}`, {
+            cache: "no-store"
+        });
 
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
@@ -564,13 +607,19 @@ async function showPhrases(category) {
         // Keep a separate in-memory list so dragging can reorder it.
         activePhrases = await response.json();
 
-        // Use a dedicated container for the phrase buttons.
+        // Use a dedicated container for the phrase items.
         const phraseList = document.createElement("div");
         phraseList.id = "phraseList";
 
         activePhrases.forEach(phrase => {
-            const button = document.createElement("button");
+            // The wrapper keeps the phrase and its edit controls together
+            // when SortableJS changes the order.
+            const phraseItem = document.createElement("div");
+            phraseItem.className = "phrase-item";
+            phraseItem.dataset.phraseId = phrase.id;
 
+            // Create the phrase button.
+            const button = document.createElement("button");
             button.type = "button";
             button.className = "phrase";
             button.textContent = phrase.text;
@@ -585,7 +634,7 @@ async function showPhrases(category) {
                 button.disabled = true;
             }
 
-            // Keep each phrase's stable ID attached to its button.
+            // Keep the stable phrase ID attached to the button.
             button.dataset.phraseId = phrase.id;
 
             button.addEventListener("click", () => {
@@ -599,12 +648,190 @@ async function showPhrases(category) {
                 showHome();
             });
 
-            phraseList.appendChild(button);
+
+            phraseItem.appendChild(button);
+
+            // Only show phrase editing controls in Edit mode.
+            if (editMode) {
+                // Open the text editor for this phrase.
+                const editButton = document.createElement("button");
+                editButton.type = "button";
+                editButton.className = "edit-phrase";
+                editButton.textContent = "✏️ Edit phrase";
+
+                editButton.addEventListener("click", () => {
+                    // Only one phrase editor may be open at a time.
+                    if (editingPhraseId !== null) {
+                        window.alert(
+                            "Finish editing the current phrase first."
+                        );
+                        return;
+                    }
+
+                    editingPhraseId = phrase.id;
+
+                    // Replace the phrase display with its editor.
+                    const editor = document.createElement("div");
+                    editor.className = "phrase-editor";
+
+                    const textarea = document.createElement("textarea");
+                    textarea.className = "phrase-edit-text";
+                    textarea.rows = 4;
+                    textarea.maxLength = 2000;
+                    textarea.value = phrase.text;
+                    textarea.setAttribute(
+                        "aria-label",
+                        "Edit phrase text"
+                    );
+
+                    const status = document.createElement("p");
+                    status.setAttribute("role", "status");
+
+                    const saveButton = document.createElement("button");
+                    saveButton.type = "button";
+                    saveButton.textContent = "Save";
+
+                    const cancelButton = document.createElement("button");
+                    cancelButton.type = "button";
+                    cancelButton.textContent = "Cancel";
+
+                    // Save the edited text to the server.
+                    saveButton.addEventListener("click", async () => {
+                        const newText = textarea.value.trim();
+
+                        if (!newText) {
+                            status.textContent =
+                                "Phrase text cannot be empty.";
+                            textarea.focus();
+                            return;
+                        }
+
+                        saveButton.disabled = true;
+                        cancelButton.disabled = true;
+                        status.textContent = "Saving...";
+
+                        const saved = await savePhraseText(
+                            category,
+                            phrase.id,
+                            newText
+                        );
+
+                        if (saved) {
+                            editingPhraseId = null;
+
+                            // Reload the authoritative phrase data.
+                            await showPhrases(category);
+                        } else {
+                            status.textContent =
+                                "Unable to save. Please try again.";
+
+                            saveButton.disabled = false;
+                            cancelButton.disabled = false;
+                        }
+                    });
+
+                    // Discard changes and restore the original phrase.
+                    cancelButton.addEventListener("click", () => {
+                        editingPhraseId = null;
+                        showPhrases(category);
+                    });
+
+                    editor.appendChild(textarea);
+                    editor.appendChild(status);
+                    editor.appendChild(saveButton);
+                    editor.appendChild(cancelButton);
+
+                    // Hide the normal phrase display while editing.
+                    button.hidden = true;
+                    editButton.hidden = true;
+
+                    // Put the editor immediately after the phrase button.
+                    phraseItem.insertBefore(editor, editButton);
+
+                    textarea.focus();
+                });
+
+                phraseItem.appendChild(editButton);
+
+                // Delete this phrase after confirmation.
+                const deleteButton = document.createElement("button");
+                deleteButton.type = "button";
+                deleteButton.className = "delete-phrase";
+                deleteButton.textContent = "🗑 Delete phrase";
+                deleteButton.setAttribute(
+                    "aria-label",
+                    `Delete phrase: ${phrase.text}`
+                );
+
+                deleteButton.addEventListener("click", async () => {
+                    if (editingPhraseId !== null) {
+                        window.alert(
+                            "Finish editing the current phrase first."
+                        );
+                        return;
+                    }
+
+                    const confirmed = window.confirm(
+                        `Delete this phrase?\n\n"${phrase.text}"\n\n` +
+                        "This cannot be undone."
+                    );
+
+                    if (!confirmed) {
+                        return;
+                    }
+
+                    deleteButton.disabled = true;
+                    deleteButton.textContent = "Deleting...";
+
+                    try {
+                        const deleteResponse = await fetch(
+                            "assets/delete-phrase.php",
+                            {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "X-Banter-Token": window.BANTER_SAVE_TOKEN
+                                },
+                                body: JSON.stringify({
+                                    categoryId: category.id,
+                                    phraseId: phrase.id
+                                })
+                            }
+                        );
+
+                        const result = await deleteResponse.json();
+
+                        if (!deleteResponse.ok || !result.ok) {
+                            throw new Error(
+                                result.error || `HTTP ${deleteResponse.status}`
+                            );
+                        }
+
+                        usedPhrases.delete(phrase.id);
+                        await showPhrases(category);
+
+                    } catch (error) {
+                        console.error(
+                            "Banter: phrase deletion failed",
+                            error
+                        );
+
+                        window.alert(
+                            "Unable to delete the phrase. Please try again."
+                        );
+
+                        deleteButton.disabled = false;
+                        deleteButton.textContent = "🗑 Delete phrase";
+                    }
+                });
+
+                phraseItem.appendChild(deleteButton);
+            }
+            
+            phraseList.appendChild(phraseItem);
         });
 
         app.appendChild(phraseList);
-        
-        
 
         // In Edit mode, offer a button to add a new phrase.
         if (editMode) {
@@ -622,23 +849,19 @@ async function showPhrases(category) {
             app.appendChild(addPhraseBtn);
         }
 
-        
-
-        // Dragging is enabled only while editing.
+        // Drag whole phrase items so each delete button stays with its phrase.
         if (editMode && typeof Sortable !== "undefined") {
             phraseSorter = Sortable.create(phraseList, {
                 animation: 150,
-
-                // Do not drag disabled buttons or buttons that aren't editable.
-                draggable: ".phrase.editable",
+                draggable: ".phrase-item",
 
                 // Copy the new displayed order into our in-memory phrase list.
                 onEnd: () => {
                     const reorderedPhrases = [];
 
-                    phraseList.querySelectorAll(".phrase").forEach(button => {
+                    phraseList.querySelectorAll(".phrase-item").forEach(item => {
                         const phrase = activePhrases.find(
-                            item => item.id === button.dataset.phraseId
+                            entry => entry.id === item.dataset.phraseId
                         );
 
                         if (phrase) {
@@ -648,7 +871,7 @@ async function showPhrases(category) {
 
                     activePhrases = reorderedPhrases;
 
-                    // Saving will be connected in the next step.
+                    // Finish editing saves this new order.
                 }
             });
         }

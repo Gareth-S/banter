@@ -18,15 +18,15 @@
         "file": "change-guitar.json"
     },
     {
-        "id": "05",
-        "desc": "just a test",
-        "name": "zz-test",
-        "file": "zz-test.json"
-    },
-    {
         "id": "01",
         "desc": "for use between songs",
         "name": "Between songs",
         "file": "between-songs.json"
+    },
+    {
+        "id": "05",
+        "desc": "just a test",
+        "name": "zz-test",
+        "file": "zz-test.json"
     }
 ]
