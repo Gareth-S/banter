@@ -1,23 +1,26 @@
-
 [
     {
-        "id": "between-songs",
+        "id": "04",
+        "desc": "for announcements",
+        "name": "Announcements",
+        "file": "announcements.json"
+    },
+    {
+        "id": "01",
+        "desc": "for use between songs",
         "name": "Between songs",
         "file": "between-songs.json"
     },
     {
-        "id": "change-guitar",
-        "name": "Change guitar",
-        "file": "change-guitar.json"
-    },
-    {
-        "id": "birthdays",
+        "id": "03",
+        "desc": "birthday banter",
         "name": "Birthdays",
         "file": "birthdays.json"
     },
     {
-        "id": "announcements",
-        "name": "Announcements",
-        "file": "announcements.json"
+        "id": "02",
+        "desc": "for use when changing guitar",
+        "name": "Change guitar",
+        "file": "change-guitar.json"
     }
 ]

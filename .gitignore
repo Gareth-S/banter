@@ -1,5 +1,7 @@
 # Local backups
 backups/
 
-# Local preferences and machine-specific settings
-data/settings.json
+# Private server credentials
+assets/banter-client-config.js
+assets/banter-config.php
+chat.txt

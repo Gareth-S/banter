@@ -103,3 +103,19 @@ button:disabled {
     cursor: default;
 }
 
+
+
+body.editing header {
+    border-bottom: 3px solid var(--accent);
+}
+
+body.editing #editModeBtn {
+    background: var(--accent);
+    color: #202124;
+}
+
+.editable {
+    border-style: dashed;
+    border-color: var(--accent);
+}
+
