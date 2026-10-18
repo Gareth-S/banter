@@ -303,6 +303,21 @@ function showHome() {
     });
 
     app.appendChild(categoryList);
+    
+        // In Edit mode, offer a button to add a new category.
+    if (editMode) {
+        const addCategoryBtn = document.createElement("button");
+
+        addCategoryBtn.type = "button";
+        addCategoryBtn.textContent = "+ Add category";
+        addCategoryBtn.id = "addCategoryBtn";
+
+        addCategoryBtn.addEventListener("click", () => {
+            showAddCategoryForm();
+            });
+        
+        app.appendChild(addCategoryBtn);
+    }
 
     // Enable drag-and-drop only while editing.
     // The SortableJS library is loaded separately by index.html.
@@ -333,6 +348,174 @@ function showHome() {
         });
     }
 }
+
+
+/*
+ * Display the form for adding a new category.
+ * The server generates the category ID and phrase filename.
+ */
+function showAddCategoryForm() {
+    // Remove the current screen.
+    app.replaceChildren();
+
+    // Form heading.
+    const heading = document.createElement("h2");
+    heading.textContent = "Add category";
+    app.appendChild(heading);
+
+    // Build the form.
+    const form = document.createElement("form");
+    form.id = "addCategoryForm";
+
+    // Category name field.
+    const nameLabel = document.createElement("label");
+    nameLabel.htmlFor = "newCategoryName";
+    nameLabel.textContent = "Category name";
+
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.id = "newCategoryName";
+    nameInput.name = "name";
+    nameInput.maxLength = 100;
+    nameInput.required = true;
+    nameInput.autocomplete = "off";
+
+    // Category description field.
+    const descLabel = document.createElement("label");
+    descLabel.htmlFor = "newCategoryDesc";
+    descLabel.textContent = "Description";
+
+    const descInput = document.createElement("input");
+    descInput.type = "text";
+    descInput.id = "newCategoryDesc";
+    descInput.name = "desc";
+    descInput.maxLength = 250;
+    descInput.required = true;
+    descInput.autocomplete = "off";
+
+    // Submit button.
+    const submitButton = document.createElement("button");
+    submitButton.type = "submit";
+    submitButton.textContent = "Create category";
+
+    // Cancel button returns to the category list.
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.textContent = "Cancel";
+    cancelButton.addEventListener("click", () => {
+        saveMessage = "";
+        showHome();
+    });
+
+    // Status/error messages appear here.
+    const message = document.createElement("p");
+    message.id = "addCategoryMessage";
+    message.setAttribute("role", "status");
+
+    // Assemble the form.
+    form.append(
+        nameLabel,
+        nameInput,
+        descLabel,
+        descInput,
+        submitButton,
+        cancelButton,
+        message
+    );
+
+    app.appendChild(form);
+
+    
+    // Submit the new category to the server.
+    form.addEventListener("submit", async (event) => {
+        // Keep the browser from navigating away from Banter.
+        event.preventDefault();
+
+        // Prevent duplicate submissions while the request is running.
+        submitButton.disabled = true;
+        cancelButton.disabled = true;
+        submitButton.textContent = "Creating...";
+        message.textContent = "";
+
+        // Track whether the server created the category successfully.
+        let categoryCreated = false;
+
+        try {
+            // Ask PHP to generate the category ID and filename.
+            const response = await fetch("assets/save-new-category.php", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Banter-Token": window.BANTER_SAVE_TOKEN
+                },
+                body: JSON.stringify({
+                    name: nameInput.value.trim(),
+                    desc: descInput.value.trim()
+                })
+            });
+
+            const result = await response.json();
+
+            // Treat HTTP errors and PHP-reported errors as failures.
+            if (!response.ok || !result.ok) {
+                throw new Error(
+                    result.error || `HTTP ${response.status}`
+                );
+            }
+
+            categoryCreated = true;
+
+            // Reload the authoritative category list from the server.
+            const categoriesResponse = await fetch("data/categories.json", {
+                cache: "no-store"
+            });
+
+            if (!categoriesResponse.ok) {
+                throw new Error("Could not reload the category list");
+            }
+
+            const updatedCategories = await categoriesResponse.json();
+
+            if (!Array.isArray(updatedCategories)) {
+                throw new Error("The category list is invalid");
+            }
+
+            // Replace the in-memory list with the updated list.
+            categories = updatedCategories;
+
+            // Return to the home screen, keeping Edit mode enabled.
+            saveMessage = "Category added successfully.";
+            showHome();
+
+        } catch (error) {
+            console.error("Banter: add category failed", error);
+
+            if (categoryCreated) {
+                // Avoid accidentally creating the same category twice.
+                submitButton.disabled = true;
+                submitButton.textContent = "Created — reload page";
+
+                message.textContent =
+                    "The category was created, but the list could not be refreshed. " +
+                    "Reload the page before trying again.";
+            } else {
+                // Keep the form available so the user can retry.
+                message.textContent =
+                    error.message || "Could not create category. Please try again.";
+
+                submitButton.disabled = false;
+                cancelButton.disabled = false;
+                submitButton.textContent = "Create category";
+            }
+        }
+    });
+
+    
+    
+    // Put the cursor in the first field.
+    nameInput.focus();
+}
+
 
 
 // --------------------------------------------------

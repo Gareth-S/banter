@@ -1,5 +1,23 @@
 [
     {
+        "id": "03",
+        "desc": "birthday banter",
+        "name": "Birthdays",
+        "file": "birthdays.json"
+    },
+    {
+        "id": "05",
+        "desc": "just a test",
+        "name": "zz-test",
+        "file": "zz-test.json"
+    },
+    {
+        "id": "02",
+        "desc": "for use when changing guitar",
+        "name": "Change guitar",
+        "file": "change-guitar.json"
+    },
+    {
         "id": "04",
         "desc": "for announcements",
         "name": "Announcements",
@@ -10,17 +28,5 @@
         "desc": "for use between songs",
         "name": "Between songs",
         "file": "between-songs.json"
-    },
-    {
-        "id": "03",
-        "desc": "birthday banter",
-        "name": "Birthdays",
-        "file": "birthdays.json"
-    },
-    {
-        "id": "02",
-        "desc": "for use when changing guitar",
-        "name": "Change guitar",
-        "file": "change-guitar.json"
     }
 ]
