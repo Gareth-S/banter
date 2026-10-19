@@ -12,6 +12,9 @@
     <script src="assets/banter-client-config.js" defer></script>
     <script src="assets/banter.js" defer></script>
     
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#202124">
+    
 </head>
 <body>
     <header>
@@ -24,8 +27,43 @@
     <main id="app">
         <p>Loading categories...</p>
     </main>
+    
+<script>
+    /*
+     * Register Banter's service worker.
+     * Refresh the offline cache on startup and reconnection.
+     */
+    if ("serviceWorker" in navigator) {
+        let banterRegistration = null;
 
-    <script src="assets/common.js" defer></script>
-    <script src="assets/app.js" defer></script>
+        function refreshBanterCache() {
+            if (banterRegistration?.active) {
+                banterRegistration.active.postMessage({
+                    type: "REFRESH_CACHE"
+                });
+            }
+        }
+
+        window.addEventListener("online", refreshBanterCache);
+
+        window.addEventListener("load", async () => {
+            try {
+                banterRegistration =
+                    await navigator.serviceWorker.register("./sw.js");
+
+                await navigator.serviceWorker.ready;
+
+                refreshBanterCache();
+            } catch (error) {
+                console.error(
+                    "Banter: service worker setup failed",
+                    error
+                );
+            }
+        });
+    }
+</script>
+
+
 </body>
 </html> 

@@ -1,0 +1,24 @@
+
+{
+    "id": "/hhh-banter-v1.0/",
+    "name": "HhH - TEST Banter",
+    "short_name": "Test Banter",
+    "description": "Band performance banter and announcements",
+    "start_url": "./index.html",
+    "scope": "./",
+    "display": "standalone",
+    "background_color": "#202124",
+    "theme_color": "#202124",
+    "icons": [
+        {
+            "src": "./assets/icon-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "./assets/icon-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

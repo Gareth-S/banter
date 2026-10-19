@@ -1,9 +1,9 @@
 [
     {
-        "id": "03",
-        "desc": "birthday banter",
-        "name": "Birthdays",
-        "file": "birthdays.json"
+        "id": "01",
+        "desc": "for use between songs",
+        "name": "Between songs",
+        "file": "between-songs.json"
     },
     {
         "id": "04",
@@ -12,21 +12,33 @@
         "file": "announcements.json"
     },
     {
+        "id": "03",
+        "desc": "birthday banter",
+        "name": "Birthdays",
+        "file": "birthdays.json"
+    },
+    {
+        "id": "07",
+        "desc": "Phrases for the tip jar",
+        "name": "Tip Jar",
+        "file": "tip-jar.json"
+    },
+    {
+        "id": "05",
+        "desc": "long jokes and stories",
+        "name": "jokes long",
+        "file": "jokes-long.json"
+    },
+    {
+        "id": "06",
+        "desc": "short jokes and stories",
+        "name": "stories short",
+        "file": "stories-short.json"
+    },
+    {
         "id": "02",
         "desc": "for use when changing guitar",
         "name": "Change guitar",
         "file": "change-guitar.json"
-    },
-    {
-        "id": "01",
-        "desc": "for use between songs",
-        "name": "Between songs",
-        "file": "between-songs.json"
-    },
-    {
-        "id": "05",
-        "desc": "just a test",
-        "name": "zz-test",
-        "file": "zz-test.json"
     }
 ]
