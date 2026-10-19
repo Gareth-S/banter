@@ -119,3 +119,132 @@ body.editing #editModeBtn {
     border-color: var(--accent);
 }
 
+
+
+/* Each phrase and its editing controls form one card. */
+.phrase-item {
+    margin: 0.7rem 0;
+    padding: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--panel);
+}
+
+/* Use the same dashed accent outline as editable category buttons. */
+body.editing .phrase-item {
+    border-style: dashed;
+    border-color: var(--accent);
+}
+
+
+/* The phrase text sits inside the card without its own button border. */
+.phrase-item .phrase {
+    display: block;
+    width: 100%;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    text-align: left;
+}
+
+/* Keep the edit and delete controls visually integrated into the card. */
+.phrase-item > button:not(.phrase) {
+    margin-top: 0.4rem;
+    border: none;
+    background: transparent;
+}
+
+/* Retain the dashed text indicator in Edit mode only if desired.
+   The card outline now provides the main visual boundary. */
+.phrase-item .phrase.editable {
+    border: none;
+}
+
+
+
+/* Make the existing phrase editor larger and centred inside its card. */
+.phrase-editor {
+    display: block;
+    width: 90%;
+    min-height: 6em;
+    margin: 0.75rem auto;
+    padding: 0.6rem;
+    font-family: inherit;
+    line-height: 1.5;
+    color: var(--text);
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    resize: both;
+}
+
+
+/* Style the actual textarea used to edit an existing phrase. */
+textarea.phrase-edit-text {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 6em;
+    margin: 0.5rem 0;
+    padding: 0.7rem;
+    font-family: inherit;
+    font-size: 1.2rem;
+    line-height: 1.5;
+    color: var(--text);
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    resize: vertical;
+}
+
+
+/* Category and phrase cards use sans-serif in both modes. */
+.category,
+.phrase-item .phrase,
+.phrase {
+    font-family: sans-serif;
+}
+
+/* Text-entry fields use serif while editing. */
+body.editing textarea,
+body.editing input {
+    font-family: serif;
+}
+
+
+/* Keep the Add Phrase label subtle and centred above its editor. */
+.new-phrase-label {
+    text-align: center;
+    margin: 0.5rem 0;
+}
+
+
+
+/* Add Category form: give each element breathing room. */
+#addCategoryForm {
+    padding: 0.5rem;
+}
+
+/* Labels sit neatly above their fields. */
+#addCategoryForm label {
+    display: block;
+    margin: 0.8rem 0 0.3rem;
+}
+
+/* Slightly larger fields, aligned to the right. */
+#addCategoryForm input {
+    display: block;
+    width: 90%;
+    margin: 0 0 0.8rem auto;
+    padding: 0.7rem;
+    box-sizing: border-box;
+    font-family: inherit;
+    font-size: 1.1rem;
+}
+
+/* Give the buttons some space below the fields. */
+#addCategoryForm button {
+    margin: 0.5rem 0.3rem 0.5rem 0;
+}
+

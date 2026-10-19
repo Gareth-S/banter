@@ -694,6 +694,21 @@ async function showPhrases(category) {
 
 
             phraseItem.appendChild(button);
+            
+            
+            // Separate the phrase text from its editing controls.
+            if (editMode) {
+                const separator = document.createElement("hr");
+
+                separator.style.width = "70%";
+                separator.style.margin = "0.5rem auto";
+                separator.style.border = "none";
+                separator.style.borderTop = "1px solid var(--border)";
+
+                phraseItem.appendChild(separator);
+            }
+
+            
 
             // Only show phrase editing controls in Edit mode.
             if (editMode) {
@@ -719,6 +734,7 @@ async function showPhrases(category) {
                     editor.className = "phrase-editor";
 
                     const textarea = document.createElement("textarea");
+                    textarea.classList.add("phrase-editor");
                     textarea.className = "phrase-edit-text";
                     textarea.rows = 4;
                     textarea.maxLength = 2000;
@@ -953,12 +969,14 @@ function showNewPhraseForm(category) {
 
     // Explain what the user is editing.
     const label = document.createElement("label");
+    heading.classList.add("new-phrase-label");
     label.htmlFor = "newPhraseText";
     label.textContent = "New phrase";
     app.appendChild(label);
 
     // The draft is not sent to the server until it is saved.
     const textarea = document.createElement("textarea");
+    textarea.classList.add("phrase-edit-text");
     textarea.id = "newPhraseText";
     textarea.rows = 5;
     textarea.maxLength = 2000;
