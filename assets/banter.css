@@ -1,11 +1,39 @@
+/* --------------------------------------------------
+   Theme colours
+   Dark is the default for existing users.
+   -------------------------------------------------- */
+
 :root {
     color-scheme: dark;
+
     --background: #202124;
     --panel: #303134;
     --text: #f1f3f4;
     --accent: #8ab4f8;
     --border: #5f6368;
+
+    /* Colours used by the theme toggle button. */
+    --theme-button-bg: #f8f9fa;
+    --theme-button-text: #202124;
+    --theme-button-border: #dadce0;
 }
+
+/* Light theme overrides the shared colour variables. */
+body.light-theme {
+    color-scheme: light;
+
+    --background: #f8f9fa;
+    --panel: #ffffff;
+    --text: #202124;
+    --accent: #1967d2;
+    --border: #929292;
+
+    /* The button advertises the theme you can switch to. */
+    --theme-button-bg: #303134;
+    --theme-button-text: #f1f3f4;
+    --theme-button-border: #5f6368;
+}
+
 
 * {
     box-sizing: border-box;
@@ -45,6 +73,9 @@ button {
     cursor: pointer;
 }
 
+
+
+
 button:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 3px;
@@ -52,12 +83,13 @@ button:focus-visible {
 
 .category {
     display: block;
-    width: 100%;
-    margin-bottom: 0.7rem;
+    width: 90%;
+    margin: 0 0 0.7rem 0;
     padding: 1rem;
     text-align: left;
     font-size: 1.15rem;
 }
+
 
 #app {
     max-width: 650px;
@@ -87,6 +119,13 @@ header {
     cursor: default;
 }
 
+
+/* Used phrases stay clearer in the light theme. */
+body.light-theme .phrase.used {
+    opacity: 1;
+    color: var(--accent);
+}
+
 .phrase:disabled {
     color: var(--text);
 }
@@ -104,6 +143,43 @@ button:disabled {
 }
 
 
+/* Keep the header buttons together with a small gap. */
+.header-buttons {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+/* The theme button displays the colours of the other theme. */
+#themeToggleBtn {
+    background: var(--theme-button-bg);
+    color: var(--theme-button-text);
+    border-color: var(--theme-button-border);
+    white-space: nowrap;
+}
+
+/* Allow the title and buttons to fit smaller phone screens. */
+@media (max-width: 420px) {
+    header {
+        flex-wrap: wrap;
+    }
+
+    header h1 {
+        font-size: 1.5rem;
+    }
+
+    .header-buttons {
+        gap: 0.35rem;
+    }
+
+    .header-buttons button {
+        padding: 0.6rem 0.65rem;
+        font-size: 0.9rem;
+    }
+}
+
+
 
 body.editing header {
     border-bottom: 3px solid var(--accent);
@@ -111,9 +187,8 @@ body.editing header {
 
 body.editing #editModeBtn {
     background: var(--accent);
-    color: #202124;
+    color: var(--background);
 }
-
 .editable {
     border-style: dashed;
     border-color: var(--accent);
@@ -123,12 +198,14 @@ body.editing #editModeBtn {
 
 /* Each phrase and its editing controls form one card. */
 .phrase-item {
+    width: 90%;
     margin: 0.7rem 0;
     padding: 0.5rem;
     border: 1px solid var(--border);
     border-radius: 0.5rem;
     background: var(--panel);
 }
+
 
 /* Use the same dashed accent outline as editable category buttons. */
 body.editing .phrase-item {

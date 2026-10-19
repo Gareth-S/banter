@@ -1,4 +1,4 @@
- <!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -13,16 +13,22 @@
     <script src="assets/banter.js" defer></script>
     
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#202124">
     
 </head>
 <body>
-    <header>
-        <h1>Banter</h1>
+<header>
+    <h1>Banter</h1>
+
+    <div class="header-buttons">
         <button id="editModeBtn" type="button">
             Edit mode
         </button>
-    </header>
+
+        <button id="themeToggleBtn" type="button">
+            ☀ Light theme
+        </button>
+    </div>
+</header>
 
     <main id="app">
         <p>Loading categories...</p>
@@ -36,13 +42,24 @@
     if ("serviceWorker" in navigator) {
         let banterRegistration = null;
 
-        function refreshBanterCache() {
-            if (banterRegistration?.active) {
-                banterRegistration.active.postMessage({
-                    type: "REFRESH_CACHE"
-                });
-            }
-        }
+function refreshBanterCache() {
+    // If offline, the existing "online" listener will retry later.
+    if (!navigator.onLine) {
+        return;
+    }
+
+    if (banterRegistration?.active) {
+        banterRegistration.active.postMessage({
+            type: "REFRESH_CACHE"
+        });
+    }
+}
+
+// Allow the four-hour timer to request a cache refresh.
+window.addEventListener(
+    "banter-cache-refresh-requested",
+    refreshBanterCache
+);
 
         window.addEventListener("online", refreshBanterCache);
 

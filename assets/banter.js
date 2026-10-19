@@ -24,9 +24,158 @@
 // This set resets when the page is reloaded.
 const usedPhrases = new Set();
 
+// --------------------------------------------------
+// Four-hour performance-session maintenance
+// --------------------------------------------------
+
+// 4 hr regular timer
+const MAINTENANCE_INTERVAL_MS = 4 * 60 * 60 * 1000;
+
+// 2 min test timer
+// const MAINTENANCE_INTERVAL_MS = 60 * 1000;
+
+const MAINTENANCE_CHECK_MS = 3 * 60 * 1000;
+const MAINTENANCE_STORAGE_KEY = "banterLastMaintenance";
+
+let activeCategory = null;
+
+// Clear used phrases and redraw the phrase list if appropriate.
+function resetUsedPhrases() {
+    usedPhrases.clear();
+
+    // Don't rebuild the screen while the user is editing.
+    // That could discard an in-progress edit.
+    if (
+        !editMode &&
+        currentScreen === "phrases" &&
+        activeCategory
+    ) {
+        showPhrases(activeCategory);
+    }
+}
+
+// Check whether four hours have elapsed since maintenance.
+function checkMaintenance() {
+    let lastMaintenance = 0;
+
+    try {
+        lastMaintenance = Number(
+            localStorage.getItem(MAINTENANCE_STORAGE_KEY)
+        );
+    } catch (error) {
+        console.warn("Banter: could not read maintenance time.", error);
+    }
+
+    // No timestamp means this is a new session.
+    // Startup already requests a cache refresh separately.
+    if (!lastMaintenance) {
+        return;
+    }
+
+    if (Date.now() - lastMaintenance < MAINTENANCE_INTERVAL_MS) {
+        return;
+    }
+
+    // Record the time before doing the work, so returning from
+    // suspension won't trigger the same maintenance repeatedly.
+    try {
+        localStorage.setItem(
+            MAINTENANCE_STORAGE_KEY,
+            String(Date.now())
+        );
+    } catch (error) {
+        console.warn("Banter: could not save maintenance time.", error);
+    }
+
+    resetUsedPhrases();
+
+    // Ask the service worker to refresh its cache.
+    // The listener in index.html will handle online/offline status.
+    window.dispatchEvent(
+        new Event("banter-cache-refresh-requested")
+    );
+}
+
+// Start a new session's four-hour countdown.
+function startMaintenanceTimer() {
+    try {
+        localStorage.setItem(
+            MAINTENANCE_STORAGE_KEY,
+            String(Date.now())
+        );
+    } catch (error) {
+        console.warn("Banter: could not save maintenance time.", error);
+    }
+
+    // The usedPhrases Set is new and empty at startup.
+    // Check periodically, without polling the server.
+    window.setInterval(checkMaintenance, MAINTENANCE_CHECK_MS);
+
+    // Timers may be suspended while the phone sleeps.
+    // Check again when the app returns to the foreground.
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) {
+            checkMaintenance();
+        }
+    });
+
+    window.addEventListener("pageshow", checkMaintenance);
+    window.addEventListener("focus", checkMaintenance);
+}
+
 // Main page elements, defined in index.html.
 const app = document.getElementById("app");
 const editModeBtn = document.getElementById("editModeBtn");
+
+// Theme toggle button.
+const themeToggleBtn = document.getElementById("themeToggleBtn");
+
+// Apply a theme and remember the choice on this device.
+function setTheme(theme) {
+    const lightTheme = theme === "light";
+
+    document.body.classList.toggle("light-theme", lightTheme);
+
+    // Show the alternative theme on the button.
+    themeToggleBtn.textContent = lightTheme
+        ? "☾ Dark theme"
+        : "☀ Light theme";
+
+    // Keep the browser UI colour in step with the page.
+    const themeColour = lightTheme ? "#f8f9fa" : "#202124";
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+
+    if (themeMeta) {
+        themeMeta.content = themeColour;
+    }
+
+    // Save the selection locally; no server request is needed.
+    try {
+        localStorage.setItem("banterTheme", lightTheme ? "light" : "dark");
+    } catch (error) {
+        console.warn("Banter: could not save theme preference.", error);
+    }
+}
+
+// Restore the saved theme, defaulting to dark for existing users.
+function loadTheme() {
+    let savedTheme = "dark";
+
+    try {
+        savedTheme = localStorage.getItem("banterTheme") || "dark";
+    } catch (error) {
+        console.warn("Banter: could not read theme preference.", error);
+    }
+
+    setTheme(savedTheme);
+}
+
+// Switch themes when the button is pressed.
+themeToggleBtn.addEventListener("click", () => {
+    const isLight = document.body.classList.contains("light-theme");
+    setTheme(isLight ? "dark" : "light");
+});
+
 
 // Displays save success or failure messages to the user.
 let saveMessage = "";
@@ -44,7 +193,7 @@ let categorySorter = null;
 // --------------------------------------------------
 
 // The category currently open on the phrase screen.
-let activeCategory = null;
+// let activeCategory = null;
 
 // The phrases currently displayed, in their current order.
 let activePhrases = [];
@@ -1069,4 +1218,8 @@ function showNewPhraseForm(category) {
 
 // Wait until the HTML document has loaded before reading
 // its elements and loading the category data.
-document.addEventListener("DOMContentLoaded", loadCategories);
+document.addEventListener("DOMContentLoaded", () => {
+    loadTheme();
+    startMaintenanceTimer();
+    loadCategories();
+});
