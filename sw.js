@@ -129,6 +129,60 @@ async function refreshCache() {
 }
 
 
+
+/*
+ * Refresh selected JSON files after a successful edit/save.
+ *
+ * Every requested file must refresh successfully. If a request fails,
+ * throw an error so the message handler can report the failure.
+ * A failed download never overwrites the previous cached copy.
+ */
+async function refreshFiles(paths) {
+    if (!Array.isArray(paths)) {
+        throw new Error("Invalid Banter refresh file list");
+    }
+
+    const cache = await caches.open(CACHE_NAME);
+    const appPath = new URL(APP_SCOPE).pathname;
+
+    for (const path of paths) {
+        // Accept only JSON files inside the app's data folder.
+        if (
+            typeof path !== "string" ||
+            !path.startsWith("data/") ||
+            !path.toLowerCase().endsWith(".json") ||
+            path.includes("..") ||
+            path.includes("?") ||
+            path.includes("#")
+        ) {
+            throw new Error("Invalid Banter data file path");
+        }
+
+        const fileURL = new URL(path, APP_SCOPE);
+
+        // Never allow a refresh request outside this app's data folder.
+        if (
+            fileURL.origin !== self.location.origin ||
+            !fileURL.pathname.startsWith(appPath + "data/") ||
+            !fileURL.pathname.toLowerCase().endsWith(".json")
+        ) {
+            throw new Error("Banter refresh path is outside the data folder");
+        }
+
+        const response = await fetch(fileURL.href, {
+            cache: "no-store"
+        });
+
+        if (!response.ok || response.type !== "basic") {
+            throw new Error(`Could not refresh ${path}`);
+        }
+
+        await cache.put(fileURL.href, response.clone());
+    }
+}
+
+
+
 /*
  * Install: build the initial offline cache.
  */
@@ -166,21 +220,69 @@ self.addEventListener("activate", event => {
 });
 
 
+
 /*
- * Refresh when the app asks us to do so at startup.
+ * Handle requests from the app to refresh its offline cache.
+ *
+ * REFRESH_CACHE refreshes the complete approved file list.
+ * REFRESH_FILES updates only the JSON files changed by a save.
+ * Reply through the supplied MessageChannel so the page knows
+ * when the requested operation has finished.
  */
 self.addEventListener("message", event => {
     if (event.data?.type === "REFRESH_CACHE") {
         event.waitUntil(
-            refreshCache().catch(error => {
-                console.warn(
-                    "Banter: background cache refresh failed",
-                    error
-                );
-            })
+            (async () => {
+                try {
+                    await refreshCache();
+                    event.ports[0]?.postMessage({
+                        type: "REFRESH_COMPLETE",
+                        ok: true
+                    });
+                } catch (error) {
+                    console.warn(
+                        "Banter: background cache refresh failed",
+                        error
+                    );
+
+                    event.ports[0]?.postMessage({
+                        type: "REFRESH_COMPLETE",
+                        ok: false
+                    });
+                }
+            })()
+        );
+
+        return;
+    }
+
+    if (event.data?.type === "REFRESH_FILES") {
+        event.waitUntil(
+            (async () => {
+                try {
+                    await refreshFiles(event.data.files || []);
+
+                    event.ports[0]?.postMessage({
+                        type: "REFRESH_COMPLETE",
+                        ok: true
+                    });
+                } catch (error) {
+                    console.warn(
+                        "Banter: requested cache refresh failed",
+                        error
+                    );
+
+                    event.ports[0]?.postMessage({
+                        type: "REFRESH_COMPLETE",
+                        ok: false
+                    });
+                }
+            })()
         );
     }
 });
+
+
 
 
 /*
@@ -203,6 +305,21 @@ self.addEventListener("fetch", event => {
 
     event.respondWith(
         (async () => {
+            /*
+             * Phrase/category JSON is cache-first for instant performance use.
+             * The startup and scheduled refreshes update these copies when
+             * online; a cache miss still gets one bounded browser fetch.
+             */
+            if (
+                url.pathname.includes("/data/") &&
+                url.pathname.toLowerCase().endsWith(".json")
+            ) {
+                const cached = await caches.match(request);
+                if (cached) {
+                    return cached;
+                }
+            }
+
             try {
                 const response = await fetch(request);
 

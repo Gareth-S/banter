@@ -130,6 +130,109 @@ const editModeBtn = document.getElementById("editModeBtn");
 // Theme toggle button.
 const themeToggleBtn = document.getElementById("themeToggleBtn");
 
+/*
+ * Bound network waits so a missing connection cannot leave Banter
+ * waiting forever. A timeout on a save means the result may be uncertain:
+ * the server could have saved the change before the reply was lost.
+ */
+const SAVE_TIMEOUT_MS = 8000;
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = SAVE_TIMEOUT_MS) {
+    const controller = new AbortController();
+    let timeoutId;
+    let timerCleared = false;
+
+    const clearTimeoutOnce = () => {
+        if (!timerCleared) {
+            window.clearTimeout(timeoutId);
+            timerCleared = true;
+        }
+    };
+
+    // Keep the timeout active while the response body is being read too.
+    // A connection can fail after headers arrive but before the JSON does.
+    timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+
+        // Most Banter requests read JSON. Wrap that step so the timeout is
+        // cleared only after the body has been fully received or has failed.
+        const originalJson = response.json.bind(response);
+        response.json = (...args) =>
+            originalJson(...args).finally(clearTimeoutOnce);
+
+        const originalText = response.text.bind(response);
+        response.text = (...args) =>
+            originalText(...args).finally(clearTimeoutOnce);
+
+        return response;
+    } catch (error) {
+        clearTimeoutOnce();
+        throw error;
+    }
+}
+
+/*
+ * Test the actual server, not just navigator.onLine. The PHP cache-file
+ * list endpoint is not cached by the service worker, so success means the
+ * server answered. Callers can use a short timeout for the Edit-mode gate.
+ */
+async function checkServer(timeoutMs = 3000) {
+    const response = await fetchWithTimeout(
+        `assets/cache-files.php?check=${Date.now()}`,
+        { cache: "no-store" },
+        timeoutMs
+    );
+
+    if (!response.ok) {
+        throw new Error(`Server check returned HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (!Array.isArray(result.files)) {
+        throw new Error("Server returned an invalid response");
+    }
+
+    return true;
+}
+
+/* Ask the service worker to refresh its approved offline files after saves. */
+async function refreshCachedData(files = []) {
+    if (!navigator.onLine) {
+        return;
+    }
+
+    const controller = navigator.serviceWorker?.controller;
+    if (!controller) {
+        return;
+    }
+
+    // Refresh only the JSON files changed by this save, then reload the UI.
+    // A short ceiling means cache trouble cannot trap the editor.
+    return new Promise(resolve => {
+        const channel = new MessageChannel();
+        const timeoutId = window.setTimeout(() => {
+            channel.port1.close();
+            resolve();
+        }, 8000);
+
+        channel.port1.onmessage = () => {
+            window.clearTimeout(timeoutId);
+            channel.port1.close();
+            resolve();
+        };
+
+        controller.postMessage(
+            { type: "REFRESH_FILES", files },
+            [channel.port2]
+        );
+    });
+}
+
 // Apply a theme and remember the choice on this device.
 function setTheme(theme) {
     const lightTheme = theme === "light";
@@ -184,6 +287,9 @@ let saveMessage = "";
 let categories = [];
 let editMode = false;
 
+// Keep the saved category order so a failed save can be cancelled safely.
+let originalCategoryOrder = [];
+
 // Reference to the active SortableJS instance.
 // Keeping this lets us destroy it when leaving Edit mode.
 let categorySorter = null;
@@ -223,9 +329,7 @@ async function loadCategories() {
 
         // Category order can change during editing, so always request
         // the latest saved version rather than relying on browser cache.
-            const response = await fetch("data/categories.json", {
-            cache: "no-store"
-            });
+            const response = await fetchWithTimeout("data/categories.json", {}, 8000);
         
         
         if (!response.ok) {
@@ -259,7 +363,7 @@ async function loadCategories() {
  */
 async function saveCategoryOrder() {
     try {
-        const response = await fetch("assets/save-categories.php", {
+        const response = await fetchWithTimeout("assets/save-categories.php", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -277,12 +381,15 @@ async function saveCategoryOrder() {
             throw new Error(result.error || `HTTP ${response.status}`);
         }
 
+        await refreshCachedData(["data/categories.json"]);
         return true;
 
     } catch (error) {
         console.error("Banter: unable to save category order", error);
 
-        saveMessage = `Save failed: ${error.message}`;
+        saveMessage = error.name === "AbortError"
+            ? "Save timed out. The server may have saved the change, but Banter could not confirm it. Keep Edit mode open and check the connection before retrying."
+            : `Save failed: ${error.message}`;
         return false;
     }
 }
@@ -299,7 +406,7 @@ async function savePhraseOrder() {
     }
 
     try {
-        const response = await fetch("assets/save-phrases.php", {
+        const response = await fetchWithTimeout("assets/save-phrases.php", {
             method: "POST",
 
             headers: {
@@ -321,11 +428,14 @@ async function savePhraseOrder() {
             throw new Error(result.error || `HTTP ${response.status}`);
         }
 
+        await refreshCachedData([`data/${activeCategory.file}`]);
         return true;
 
     } catch (error) {
         console.error("Banter: phrase order save failed", error);
-        saveMessage = "Unable to save phrase order. Please try again.";
+        saveMessage = error.name === "AbortError"
+            ? "Save timed out. The server may have saved the change, but Banter could not confirm it. Keep Edit mode open and check the connection before retrying."
+            : "Unable to save phrase order. Please try again.";
         return false;
     }
 }
@@ -340,7 +450,7 @@ async function savePhraseOrder() {
  */
 async function savePhraseText(category, phraseId, text) {
     try {
-        const response = await fetch("assets/save-phrase-txt.php", {
+        const response = await fetchWithTimeout("assets/save-phrase-txt.php", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -359,6 +469,7 @@ async function savePhraseText(category, phraseId, text) {
             throw new Error(result.error || `HTTP ${response.status}`);
         }
 
+        await refreshCachedData([`data/${category.file}`]);
         return true;
 
     } catch (error) {
@@ -390,15 +501,65 @@ function setEditMode(enabled) {
 }
 
 
-// Entering Edit mode is immediate.
-// Saving when leaving Edit mode will be added in the next step.
+/*
+ * Discard only the unsaved reordering after a save failure.
+ * The server and its saved JSON files are never changed by this action.
+ */
+function cancelOrderChanges() {
+    if (currentScreen === "phrases" && activeCategory) {
+        const phrasesById = new Map(
+            activePhrases.map(phrase => [phrase.id, phrase])
+        );
+
+        activePhrases = originalPhraseOrder
+            .map(id => phrasesById.get(id))
+            .filter(Boolean);
+    } else {
+        const categoriesById = new Map(
+            categories.map(category => [category.id, category])
+        );
+
+        const restoredCategories = originalCategoryOrder
+            .map(id => categoriesById.get(id))
+            .filter(Boolean);
+
+        // Keep any category created during this editing session; adding a
+        // category is already saved separately from its drag-and-drop order.
+        const savedIds = new Set(restoredCategories.map(category => category.id));
+        categories = restoredCategories.concat(
+            categories.filter(category => !savedIds.has(category.id))
+        );
+    }
+
+    saveMessage = "Unsaved order changes cancelled.";
+    setEditMode(false);
+}
 
 
 editModeBtn.addEventListener("click", async () => {
-    // Entering Edit mode is immediate; nothing needs saving yet.
+    // Only enter Edit mode after the server responds; offline editing could
+    // otherwise invite changes that cannot be saved.
     if (!editMode) {
-        saveMessage = "";
-        setEditMode(true);
+        editModeBtn.disabled = true;
+        editModeBtn.textContent = "Checking connection...";
+
+        try {
+            await checkServer(3000);
+            saveMessage = "";
+
+            // Remember the saved category order before drag-and-drop begins.
+            originalCategoryOrder = categories.map(category => category.id);
+            setEditMode(true);
+        } catch (error) {
+            console.warn("Banter: Edit mode requires a server connection.", error);
+            window.alert(
+                "Edit mode is unavailable because Banter could not reach the server. " +
+                "Check your connection and try again."
+            );
+        } finally {
+            editModeBtn.disabled = false;
+            editModeBtn.textContent = editMode ? "Finish editing" : "Edit mode";
+        }
         return;
     }
 
@@ -406,6 +567,9 @@ editModeBtn.addEventListener("click", async () => {
     const savingPhrases = currentScreen === "phrases";
 
     // Prevent repeated clicks while the save is in progress.
+    saveMessage = "";
+    document.getElementById("saveStatus")?.remove();
+    document.querySelector(".save-actions")?.remove();
     editModeBtn.disabled = true;
     editModeBtn.textContent = "Saving...";
 
@@ -416,17 +580,91 @@ editModeBtn.addEventListener("click", async () => {
 
     editModeBtn.disabled = false;
 
+
     if (saved) {
-        // Report which order was saved successfully.
-        saveMessage = savingPhrases
+        // Keep the confirmation text locally while the screen is rebuilt.
+        const confirmation = savingPhrases
             ? "Phrase order saved."
             : "Category order saved.";
 
+        // Prevent showHome() from displaying the same message during redraw.
+        saveMessage = "";
+
         // Return to performance mode on the same screen.
         setEditMode(false);
+
+        // Display the confirmation once on the screen where the save occurred.
+        const status = document.createElement("p");
+        status.id = "saveStatus";
+        status.setAttribute("role", "status");
+        status.textContent = confirmation;
+        
+        
+        if (savingPhrases) {
+            // Keep the confirmation on the phrase screen, below Home.
+            const homeButton = app.querySelector("button");
+            if (homeButton) {
+                app.insertBefore(status, homeButton.nextSibling);
+            } else {
+                app.prepend(status);
+            }
+        } else {
+            // Category confirmations appear at the top of the home screen.
+            app.prepend(status);
+        }
+
+        // The message has now been displayed; don't show it again on Home.
+        saveMessage = "";
+        
+        
+        
     } else {
-        // Keep Edit mode and the current order if saving fails.
-        setEditMode(true);
+        // Keep the shuffled order in memory until the user retries or cancels.
+        // Do not rebuild the screen here: that could lose the user's changes.
+        editModeBtn.textContent = "Finish editing";
+
+        const status = document.createElement("p");
+        status.id = "saveStatus";
+        status.setAttribute("role", "alert");
+        status.textContent = saveMessage;
+        
+// Keep the error directly below the Home button on the phrase screen,
+// or at the very top of the category screen.
+if (currentScreen === "phrases") {
+    const homeButton = app.querySelector("button");
+    if (homeButton) {
+        app.insertBefore(status, homeButton.nextSibling);
+    } else {
+        app.prepend(status);
+    }
+} else {
+    app.prepend(status);
+}
+
+
+        const actions = document.createElement("div");
+        actions.className = "save-actions";
+
+        const retryButton = document.createElement("button");
+        retryButton.type = "button";
+        retryButton.textContent = "Retry save";
+        retryButton.addEventListener("click", () => {
+            // Run the same guarded save flow as Finish editing.
+            editModeBtn.click();
+        });
+
+        const cancelButton = document.createElement("button");
+        cancelButton.type = "button";
+        cancelButton.textContent = "Cancel changes";
+        cancelButton.addEventListener("click", () => {
+            cancelOrderChanges();
+        });
+
+        actions.append(retryButton, cancelButton);
+        app.insertBefore(actions, status.nextSibling);
+        
+        // Bring the failed-save message and recovery buttons into view.
+        window.scrollTo(0, 0);
     }
 });
 
@@ -460,7 +698,7 @@ function showHome() {
         const message = document.createElement("p");
         message.textContent = saveMessage;
         message.setAttribute("role", "status");
-        app.appendChild(message);
+        app.prepend(message);
                 }
 
     // Put all category buttons inside one container.
@@ -635,7 +873,7 @@ function showAddCategoryForm() {
 
         try {
             // Ask PHP to generate the category ID and filename.
-            const response = await fetch("assets/save-new-category.php", {
+            const response = await fetchWithTimeout("assets/save-new-category.php", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -659,9 +897,11 @@ function showAddCategoryForm() {
             categoryCreated = true;
 
             // Reload the authoritative category list from the server.
-            const categoriesResponse = await fetch("data/categories.json", {
-                cache: "no-store"
-            });
+            const categoriesResponse = await fetchWithTimeout(
+                "data/categories.json",
+                {},
+                8000
+            );
 
             if (!categoriesResponse.ok) {
                 throw new Error("Could not reload the category list");
@@ -673,8 +913,13 @@ function showAddCategoryForm() {
                 throw new Error("The category list is invalid");
             }
 
-            // Replace the in-memory list with the updated list.
+            // Replace the in-memory list and cache the category list plus
+            // every phrase file, including the new category's empty JSON.
             categories = updatedCategories;
+            await refreshCachedData([
+                "data/categories.json",
+                ...updatedCategories.map(item => `data/${item.file}`)
+            ]);
 
             // Return to the home screen, keeping Edit mode enabled.
             saveMessage = "Category added successfully.";
@@ -693,8 +938,9 @@ function showAddCategoryForm() {
                     "Reload the page before trying again.";
             } else {
                 // Keep the form available so the user can retry.
-                message.textContent =
-                    error.message || "Could not create category. Please try again.";
+                message.textContent = error.name === "AbortError"
+                    ? "The request timed out. The category may have been created; check the category list before trying again."
+                    : (error.message || "Could not create category. Please try again.");
 
                 submitButton.disabled = false;
                 cancelButton.disabled = false;
@@ -717,10 +963,22 @@ function showAddCategoryForm() {
 
 
 async function showPhrases(category) {
-    // Remember which category is open.
+    // Record whether this is a genuine move from Home to a category.
+    // Redrawing an already-open category must not add history entries.
+    const wasOnPhraseScreen = currentScreen === "phrases";
+
     currentScreen = "phrases";
     activeCategory = category;
 
+    if (!wasOnPhraseScreen) {
+        history.pushState(
+            { banterScreen: "phrases" },
+            "",
+            location.href
+        );
+            }
+            
+            
     // Remove any previous phrase drag-and-drop instance.
     if (phraseSorter) {
         phraseSorter.destroy();
@@ -786,9 +1044,11 @@ async function showPhrases(category) {
 
     try {
         // Each category stores its phrases in its own JSON file.
-        const response = await fetch(`data/${category.file}`, {
-            cache: "no-store"
-        });
+        const response = await fetchWithTimeout(
+            `data/${category.file}`,
+            {},
+            8000
+        );
 
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
@@ -932,7 +1192,7 @@ async function showPhrases(category) {
                             await showPhrases(category);
                         } else {
                             status.textContent =
-                                "Unable to save. Please try again.";
+                                "Unable to confirm the save. Your text is still here. Check the connection before retrying.";
 
                             saveButton.disabled = false;
                             cancelButton.disabled = false;
@@ -993,7 +1253,7 @@ async function showPhrases(category) {
                     deleteButton.textContent = "Deleting...";
 
                     try {
-                        const deleteResponse = await fetch(
+                        const deleteResponse = await fetchWithTimeout(
                             "assets/delete-phrase.php",
                             {
                                 method: "POST",
@@ -1017,6 +1277,7 @@ async function showPhrases(category) {
                         }
 
                         usedPhrases.delete(phrase.id);
+                        await refreshCachedData([`data/${category.file}`]);
                         await showPhrases(category);
 
                     } catch (error) {
@@ -1096,6 +1357,13 @@ async function showPhrases(category) {
     }
 }
 
+// Handle the phone/browser Back button while viewing phrases.
+window.addEventListener("popstate", () => {
+    if (currentScreen === "phrases") {
+        showHome();
+    }
+});
+
 
 /*
  * Show the editor for a new phrase.
@@ -1159,7 +1427,7 @@ function showNewPhraseForm(category) {
         status.textContent = "Saving phrase...";
 
         try {
-            const response = await fetch("assets/save-new-phrase.php", {
+            const response = await fetchWithTimeout("assets/save-new-phrase.php", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -1179,14 +1447,16 @@ function showNewPhraseForm(category) {
                 );
             }
 
-            // Reload the phrase list so the newly saved phrase appears.
+            // Refresh offline copies, then reload the saved phrase list.
+            await refreshCachedData([`data/${category.file}`]);
             await showPhrases(category);
 
         } catch (error) {
             console.error("Banter: new phrase save failed", error);
 
-            status.textContent =
-                "Unable to save the phrase. Please try again.";
+            status.textContent = error.name === "AbortError"
+                ? "The request timed out. The phrase may have been saved; check the category before retrying to avoid a duplicate."
+                : "Unable to save the phrase. Please try again.";
 
             saveBtn.disabled = false;
             discardBtn.disabled = false;
@@ -1221,5 +1491,11 @@ function showNewPhraseForm(category) {
 document.addEventListener("DOMContentLoaded", () => {
     loadTheme();
     startMaintenanceTimer();
+
+    // Check connectivity in the background; never delay cached startup.
+    checkServer(3000).catch(() => {
+        console.info("Banter: starting with available cached data.");
+    });
+
     loadCategories();
 });

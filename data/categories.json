@@ -1,15 +1,33 @@
 [
     {
+        "id": "08",
+        "desc": "Start of set or gig",
+        "name": "Start of set or gig",
+        "file": "start-of-set-or-gig.json"
+    },
+    {
         "id": "01",
         "desc": "for use between songs",
         "name": "Between songs",
         "file": "between-songs.json"
     },
     {
-        "id": "04",
-        "desc": "for announcements",
-        "name": "Announcements",
-        "file": "announcements.json"
+        "id": "02",
+        "desc": "for use when changing guitar",
+        "name": "Change guitar",
+        "file": "change-guitar.json"
+    },
+    {
+        "id": "07",
+        "desc": "Phrases for the tip jar",
+        "name": "Tip Jar",
+        "file": "tip-jar.json"
+    },
+    {
+        "id": "09",
+        "desc": "End of set or gig",
+        "name": "End of set or gig",
+        "file": "end-of-set-or-gig.json"
     },
     {
         "id": "03",
@@ -18,10 +36,10 @@
         "file": "birthdays.json"
     },
     {
-        "id": "07",
-        "desc": "Phrases for the tip jar",
-        "name": "Tip Jar",
-        "file": "tip-jar.json"
+        "id": "04",
+        "desc": "for announcements",
+        "name": "Announcements",
+        "file": "announcements.json"
     },
     {
         "id": "05",
@@ -34,11 +52,5 @@
         "desc": "short jokes and stories",
         "name": "stories short",
         "file": "stories-short.json"
-    },
-    {
-        "id": "02",
-        "desc": "for use when changing guitar",
-        "name": "Change guitar",
-        "file": "change-guitar.json"
     }
 ]

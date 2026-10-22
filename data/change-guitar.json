@@ -1,11 +1,27 @@
 [
     {
+        "id": "cg-004",
+        "text": "Our guitarist is switching weapons for this next track. \nWhile he locks and loads, feel free to tip the jar"
+    },
+    {
+        "id": "cg-006",
+        "text": "Looks like we played that last chord a little too hard. While we fix this broken string, throw some love in the jar so we can buy a backup pack!"
+    },
+    {
         "id": "cg-002",
         "text": "This next one needs a slightly different sound."
     },
     {
+        "id": "cg-007",
+        "text": "We’ve got a technical issue up here—turns out our gear is as vintage as our blues (we are). \nTake a second to scan the QR code while we get the electricity flowing again!"
+    },
+    {
         "id": "cg-001",
         "text": "Give me a moment while I change my guitars!"
+    },
+    {
+        "id": "cg-005",
+        "text": "We’re changing up the gear for some slide guitar on this next one. Keep the bartenders busy while we switch over!\""
     },
     {
         "id": "cg-003",

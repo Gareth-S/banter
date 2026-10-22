@@ -1,5 +1,5 @@
 # Local backups
-backups/
+archive/
 
 # Private server credentials
 assets/banter-client-config.js

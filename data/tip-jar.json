@@ -1,1 +1,22 @@
-[]
+[
+    {
+        "id": "tj-002",
+        "text": "If you fear change, leave it here!"
+    },
+    {
+        "id": "tj-001",
+        "text": "Progress is impossible without change"
+    },
+    {
+        "id": "tj-003",
+        "text": "Flattery is nice but tips will suffice."
+    },
+    {
+        "id": "tj-004",
+        "text": "Drink responsibly, tip recklessly."
+    },
+    {
+        "id": "tj-005",
+        "text": "Tip your bartenders to keep the drinks flowing, and tip the band to keep the music loud."
+    }
+]
