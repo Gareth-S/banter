@@ -325,3 +325,15 @@ body.editing input {
     margin: 0.5rem 0.3rem 0.5rem 0;
 }
 
+/* Keep the phrase timer as a traditional native dropdown. */
+#phraseReturnDelay {
+    appearance: auto;
+    -webkit-appearance: menulist;
+    font: inherit;
+}
+
+
+/* Add space between Home and the complete timer control. */
+label[for="phraseReturnDelay"] {
+    margin-left: 0.7em;
+}

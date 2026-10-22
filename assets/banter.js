@@ -25,6 +25,21 @@
 const usedPhrases = new Set();
 
 // --------------------------------------------------
+// Phrase return timer
+// --------------------------------------------------
+
+// Remember the selected delay on this device; zero means return immediately.
+const PHRASE_DELAY_KEY = "banterPhraseDelay";
+let phraseReturnTimer = null;
+
+function clearPhraseReturnTimer() {
+    if (phraseReturnTimer !== null) {
+        window.clearTimeout(phraseReturnTimer);
+        phraseReturnTimer = null;
+    }
+}
+
+// --------------------------------------------------
 // Four-hour performance-session maintenance
 // --------------------------------------------------
 
@@ -674,6 +689,8 @@ if (currentScreen === "phrases") {
 // --------------------------------------------------
 
 function showHome() {
+    // Never leave a pending countdown running after returning home.
+    clearPhraseReturnTimer();
     // Remove the previous screen and any old category buttons.
     currentScreen = "home";
     app.replaceChildren();
@@ -1031,9 +1048,8 @@ async function showPhrases(category) {
     });
 
     app.appendChild(backButton);
-
     
-    
+        
     // Show the category name as the heading.
     const heading = document.createElement("h2");
     heading.textContent = editMode
@@ -1042,6 +1058,80 @@ async function showPhrases(category) {
 
     app.appendChild(heading);
 
+
+
+       // Let the performer choose how long a phrase stays visible.
+    // The preference is local to this device and works offline.
+    if (!editMode) {
+        const timerLabel = document.createElement("label");
+        timerLabel.htmlFor = "phraseReturnDelay";
+        timerLabel.textContent = "Home in ";
+
+        const timerSelect = document.createElement("select");
+        timerSelect.id = "phraseReturnDelay";
+        timerSelect.setAttribute("aria-label", "Seconds before returning home");
+
+/*        
+        // Keep the timer control compact for small phone screens.
+        // Zero means Off; the word "seconds" stays outside the dropdown.
+        const timerOptions = Array.from({ length: 10 }, (_, i) => String(i));
+
+        timerOptions.forEach(value => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = value;
+            timerSelect.appendChild(option);
+        });
+*/
+        
+const timerOptions = [
+    ["0", "0"],
+    ...Array.from({ length: 9 }, (_, i) => [
+        String(i + 1),
+        String(i + 1)
+    ])
+];
+
+        
+        let savedDelay = "0";
+        try {
+            savedDelay = localStorage.getItem(PHRASE_DELAY_KEY) || "0";
+        } catch (error) {
+            console.warn("Banter: could not read phrase timer preference.", error);
+        }
+
+        // Build the choices and fall back safely if storage contains an invalid value.
+        timerOptions.forEach(([label, value]) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = label;
+            timerSelect.appendChild(option);
+        });
+
+        timerSelect.value = timerOptions.some(([, value]) => value === savedDelay)
+            ? savedDelay
+            : "0";
+
+        timerSelect.addEventListener("change", () => {
+            try {
+                localStorage.setItem(PHRASE_DELAY_KEY, timerSelect.value);
+            } catch (error) {
+                console.warn("Banter: could not save phrase timer preference.", error);
+            }
+        });
+
+        timerLabel.appendChild(timerSelect);
+
+        const secondsText = document.createTextNode(" seconds");
+        timerLabel.appendChild(secondsText);
+
+        app.insertBefore(timerLabel, heading);
+        
+        
+    } 
+    
+
+    
     try {
         // Each category stores its phrases in its own JSON file.
         const response = await fetchWithTimeout(
@@ -1082,25 +1172,43 @@ async function showPhrases(category) {
                 button.classList.add("editable");
 
             } else if (usedPhrases.has(phrase.id)) {
-                // Used phrases are greyed out and cannot be selected.
+                // Used phrases are greyed out // and cannot be selected.
                 button.classList.add("used");
-                button.disabled = true;
+                button.disabled = false;
             }
 
             // Keep the stable phrase ID attached to the button.
             button.dataset.phraseId = phrase.id;
+            
 
-            button.addEventListener("click", () => {
-                // Never mark phrases as used while editing.
-                if (editMode) {
-                    return;
-                }
+button.addEventListener("click", () => {
+    // Never mark phrases as used while editing.
+    if (editMode) {
+        return;
+    }
 
-                // Record the phrase as used and return home.
-                usedPhrases.add(phrase.id);
-                showHome();
-            });
+    // Record the phrase immediately, even when the timer is enabled.
+    usedPhrases.add(phrase.id);
+    button.classList.add("used");
 
+    const timerSelect = document.getElementById("phraseReturnDelay");
+    const delaySeconds = Number(timerSelect?.value || 0);
+
+    // Cancel any previous countdown so another tap gives fresh reading time.
+    clearPhraseReturnTimer();
+
+    if (delaySeconds === 0) {
+        // Off preserves the original immediate-return behaviour.
+        showHome();
+        return;
+    }
+
+    // Leave the phrase screen visible while the countdown runs.
+    phraseReturnTimer = window.setTimeout(() => {
+        phraseReturnTimer = null;
+        showHome();
+    }, delaySeconds * 1000);
+});
 
             phraseItem.appendChild(button);
             
