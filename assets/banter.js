@@ -684,6 +684,144 @@ if (currentScreen === "phrases") {
 });
 
 
+ // --------------------------------------------------
+// Delete a category safely through the server
+// --------------------------------------------------
+
+/*
+ * Category deletion transfers phrases to Bucket before removing the
+ * category. If the result of a request is uncertain, tell the user to
+ * reload and inspect the data before trying again.
+ */
+async function deleteCategory(category) {
+    if (category.id === "10" || category.file === "bucket.json") {
+        window.alert("Bucket is permanent and cannot be deleted.");
+        return;
+    }
+
+    let phraseCount;
+
+    try {
+        // Check the current phrase count before asking for confirmation.
+        const phraseResponse = await fetchWithTimeout(
+            `data/${category.file}?check=${Date.now()}`,
+            { cache: "no-store" },
+            8000
+        );
+
+        if (!phraseResponse.ok) {
+            throw new Error("Could not read this category's phrases.");
+        }
+
+        const phrases = await phraseResponse.json();
+
+        if (!Array.isArray(phrases)) {
+            throw new Error("This category's phrase list is invalid.");
+        }
+
+        phraseCount = phrases.length;
+    } catch (error) {
+        window.alert(
+            "Banter could not check the category's phrases, so it has not " +
+            "been deleted. Check the connection and try again."
+        );
+        return;
+    }
+
+    const phraseNote = phraseCount === 0
+        ? "It contains no phrases."
+        : `${phraseCount} phrase${phraseCount === 1 ? "" : "s"} will be transferred to Bucket.`;
+
+    if (!window.confirm(
+        `Delete the category “${category.name}”?\n\n${phraseNote}\n\n` +
+        "The category itself will be removed; its phrases will remain in Bucket."
+    )) {
+        return;
+    }
+
+    // Prevent another deletion request while this one is in progress.
+    const deleteButtons = app.querySelectorAll(".delete-category");
+    deleteButtons.forEach(button => {
+        button.disabled = true;
+    });
+
+    try {
+        const response = await fetchWithTimeout("assets/delete-category.php", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Banter-Token": window.BANTER_SAVE_TOKEN
+            },
+            body: JSON.stringify({ categoryId: category.id })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || `HTTP ${response.status}`);
+        }
+
+        // Reload the authoritative category list after deletion.
+        const categoriesResponse = await fetchWithTimeout(
+            `data/categories.json?refresh=${Date.now()}`,
+            { cache: "no-store" },
+            8000
+        );
+
+        if (!categoriesResponse.ok) {
+            throw new Error(
+                "Deletion succeeded, but the category list could not be reloaded."
+            );
+        }
+
+        const updatedCategories = await categoriesResponse.json();
+
+        if (!Array.isArray(updatedCategories)) {
+            throw new Error(
+                "Deletion succeeded, but the category list is invalid."
+            );
+        }
+
+        categories = updatedCategories;
+
+        // Refresh the cache so the deleted category and old phrase data
+        // are not left as the app's cached view of the world.
+        await refreshCachedData([
+            "data/categories.json",
+            ...updatedCategories.map(item => `data/${item.file}`)
+        ]);
+
+
+        // Report successful deletion, and flag any leftover source file.
+        saveMessage = `Category deleted. ${result.transferred || 0} phrase(s) transferred to Bucket.`;
+
+        if (result.cleanupWarning) {
+            saveMessage +=
+                " Warning: the old phrase file could not be removed. " +
+                "Please check the data folder.";
+        }
+
+        
+        showHome();
+
+    } catch (error) {
+        console.error("Banter: category deletion failed", error);
+
+        window.alert(
+            "Banter could not confirm that the category was deleted. " +
+            "Do not retry immediately if the request timed out. Reload the page " +
+            "and check the category list and Bucket first.\n\n" +
+            (error.message || "Unknown error")
+        );
+
+        deleteButtons.forEach(button => {
+            button.disabled = false;
+        });
+    }
+}
+
+
+
 // --------------------------------------------------
 // Category home screen
 // --------------------------------------------------
@@ -723,16 +861,38 @@ function showHome() {
     const categoryList = document.createElement("div");
     categoryList.id = "categoryList";
 
-    categories.forEach(category => {
-        const button = document.createElement("button");
+    // Keep a clear gap between category cards.
+categoryList.style.display = "flex";
+categoryList.style.flexDirection = "column";
+categoryList.style.gap = "0.8rem";
+    
 
+    categories.forEach(category => {
+        // Keep the category button and its Delete control together.
+        // SortableJS can then move each row as one item.
+        
+// One continuous card contains the category name and delete control.
+const row = document.createElement("div");
+row.className = "category-row";
+row.style.display = "flex";
+row.style.alignItems = "stretch";
+row.style.gap = "0.5rem";
+row.style.margin = "0";
+row.style.border = "1px solid var(--border)";
+row.style.borderRadius = "var(--radius, 8px)";
+row.style.overflow = "hidden";
+
+        const button = document.createElement("button");
         button.type = "button";
         button.className = "category";
         button.textContent = category.name;
+        button.dataset.categoryId = category.id;
+        button.style.flex = "1";
         
-        // Keep the stable category ID on the button.
-        // Sorting can then identify categories even if names change.
-            button.dataset.categoryId = category.id;
+// The surrounding row supplies the single card outline.
+button.style.border = "none";
+button.style.borderRadius = "0";
+button.style.margin = "0";
 
         // Mark category buttons visually while editing.
         if (editMode) {
@@ -740,14 +900,46 @@ function showHome() {
         }
 
         // In performance mode, tapping opens the category.
-        // In Edit mode, tapping does nothing for now.
+        // In Edit mode, tapping does nothing.
         button.addEventListener("click", () => {
             if (!editMode) {
                 showPhrases(category);
             }
         });
 
-        categoryList.appendChild(button);
+        row.appendChild(button);
+
+        // Bucket is permanent, but remains sortable and usable normally.
+        if (
+            editMode &&
+            category.id !== "10" &&
+            category.file !== "bucket.json"
+        ) {
+            const deleteButton = document.createElement("button");
+            deleteButton.type = "button";
+            deleteButton.className = "delete-category";
+            
+            deleteButton.textContent = "🗑";
+            deleteButton.title = `Delete category ${category.name}`;
+            deleteButton.style.flex = "0 0 auto";
+            deleteButton.style.padding = "0.4rem 0.65rem";
+deleteButton.style.border = "none";
+deleteButton.style.borderRadius = "0";
+deleteButton.style.margin = "0";
+
+            deleteButton.setAttribute(
+                "aria-label",
+                `Delete category ${category.name}`
+            );
+
+            deleteButton.addEventListener("click", () => {
+                deleteCategory(category);
+            });
+
+            row.insertBefore(deleteButton, button);
+        }
+
+        categoryList.appendChild(row);
     });
 
     app.appendChild(categoryList);
@@ -770,9 +962,17 @@ function showHome() {
     // Enable drag-and-drop only while editing.
     // The SortableJS library is loaded separately by index.html.
     if (editMode && typeof Sortable !== "undefined") {
+        
         categorySorter = Sortable.create(categoryList, {
             animation: 150,
 
+            // On phones, wait for a deliberate long-press before dragging.
+            // If the finger moves first, allow the normal page scroll.
+            delay: 400,
+            delayOnTouchOnly: true,
+            touchStartThreshold: 5,
+            fallbackTolerance: 5,
+            
             // Only allow the user to reorder category buttons.
             // The new order is copied back into our category data.
             onEnd: () => {
@@ -838,7 +1038,7 @@ function showAddCategoryForm() {
     descInput.id = "newCategoryDesc";
     descInput.name = "desc";
     descInput.maxLength = 250;
-    descInput.required = true;
+    descInput.required = false;
     descInput.autocomplete = "off";
 
     // Submit button.
