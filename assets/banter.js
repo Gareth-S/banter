@@ -447,10 +447,10 @@ async function savePhraseOrder() {
         return true;
 
     } catch (error) {
-        console.error("Banter: phrase order save failed", error);
+        console.error("Banter: phrase save failed", error);
         saveMessage = error.name === "AbortError"
             ? "Save timed out. The server may have saved the change, but Banter could not confirm it. Keep Edit mode open and check the connection before retrying."
-            : "Unable to save phrase order. Please try again.";
+            : "Unable to save phrases. Please try again.";
         return false;
     }
 }
@@ -599,8 +599,8 @@ editModeBtn.addEventListener("click", async () => {
     if (saved) {
         // Keep the confirmation text locally while the screen is rebuilt.
         const confirmation = savingPhrases
-            ? "Phrase order saved."
-            : "Category order saved.";
+            ? "Phrases saved."
+            : "Categories saved.";
 
         // Prevent showHome() from displaying the same message during redraw.
         saveMessage = "";
@@ -1153,6 +1153,31 @@ const timerOptions = [
         // Use a dedicated container for the phrase items.
         const phraseList = document.createElement("div");
         phraseList.id = "phraseList";
+        
+                // Load categories once so each phrase can offer transfer destinations.
+        let transferCategories = [];
+
+        if (editMode) {
+            try {
+                const categoriesResponse = await fetchWithTimeout(
+                    "data/categories.json",
+                    {},
+                    8000
+                );
+
+                if (!categoriesResponse.ok) {
+                    throw new Error(`HTTP ${categoriesResponse.status}`);
+                }
+
+                transferCategories = await categoriesResponse.json();
+            } catch (error) {
+                console.error(
+                    "Banter: could not load transfer categories",
+                    error
+                );
+            }
+        }
+        
 
         activePhrases.forEach(phrase => {
             // The wrapper keeps the phrase and its edit controls together
@@ -1329,6 +1354,210 @@ button.addEventListener("click", () => {
                 });
 
                 phraseItem.appendChild(editButton);
+                
+                
+                // Let the user copy or move this phrase to another category.
+                // The server assigns a fresh ID in the destination category.
+                // Choose the destination first; reveal actions only when selected.
+                const transferControls = document.createElement("div");
+                transferControls.className = "phrase-transfer";
+
+                const transferLabel = document.createElement("label");
+                transferLabel.textContent = "Copy/move to ";
+
+                const destinationSelect = document.createElement("select");
+                destinationSelect.className = "phrase-transfer-category";
+                destinationSelect.setAttribute(
+                    "aria-label",
+                    "Category to copy or move phrase to"
+                );
+
+                const placeholder = document.createElement("option");
+                placeholder.value = "";
+                placeholder.textContent = "Choose category...";
+                placeholder.selected = true;
+                destinationSelect.appendChild(placeholder);
+
+                transferLabel.appendChild(destinationSelect);
+                transferControls.appendChild(transferLabel);
+ 
+                transferCategories
+                    .filter(destination => destination.id !== category.id)
+                    .forEach(destination => {
+                        const option = document.createElement("option");
+                        option.value = destination.id;
+                        option.textContent = destination.name;
+                        destinationSelect.appendChild(option);
+                    });
+
+                const transferStatus = document.createElement("p");
+                transferStatus.className = "phrase-transfer-status";
+                transferStatus.setAttribute("role", "status");
+
+                const copyButton = document.createElement("button");
+                copyButton.type = "button";
+                copyButton.textContent = "Copy";
+
+                const moveButton = document.createElement("button");
+                moveButton.type = "button";
+                moveButton.textContent = "Move";
+
+                const cancelTransferButton = document.createElement("button");
+                cancelTransferButton.type = "button";
+                cancelTransferButton.textContent = "Cancel";
+                
+                // Keep the controls tidy until a destination is chosen.
+/*                const transferActions = document.createElement("div");
+                transferActions.className = "phrase-transfer-actions";
+                transferActions.hidden = true;
+
+                transferActions.appendChild(copyButton);
+                transferActions.appendChild(moveButton);
+                transferActions.appendChild(cancelTransferButton);
+
+*/
+                destinationSelect.addEventListener("change", () => {
+                    transferActions.hidden = !destinationSelect.value;
+                    transferStatus.textContent = "";
+                });
+                
+
+                // Save a fresh destination entry before considering any deletion.
+                async function transferPhrase(removeOriginal) {
+                    const destinationId = destinationSelect.value;
+
+                    if (!destinationId) {
+                        transferStatus.textContent =
+                            "Choose a destination category first.";
+                        return;
+                    }
+
+                    const destination = transferCategories.find(
+                        entry => entry.id === destinationId
+                    );
+
+                    if (!destination) {
+                        transferStatus.textContent =
+                            "That destination category is unavailable.";
+                        return;
+                    }
+
+                    copyButton.disabled = true;
+                    moveButton.disabled = true;
+                    cancelTransferButton.disabled = true;
+                    destinationSelect.disabled = true;
+                    transferStatus.textContent = removeOriginal
+                        ? "Moving phrase..."
+                        : "Copying phrase...";
+
+                    try {
+                        // This endpoint creates a new destination ID.
+                        const response = await fetchWithTimeout(
+                            "assets/save-new-phrase.php",
+                            {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "X-Banter-Token": window.BANTER_SAVE_TOKEN
+                                },
+                                body: JSON.stringify({
+                                    categoryId: destination.id,
+                                    text: phrase.text
+                                })
+                            }
+                        );
+
+                        const result = await response.json();
+
+                        if (!response.ok || !result.ok) {
+                            throw new Error(
+                                result.error || `HTTP ${response.status}`
+                            );
+                        }
+
+                        // Refresh the destination's offline copy after saving.
+                        await refreshCachedData([`data/${destination.file}`]);
+
+                        if (removeOriginal) {
+                            // Only delete the original after destination creation succeeds.
+                            const deleteResponse = await fetchWithTimeout(
+                                "assets/delete-phrase.php",
+                                {
+                                    method: "POST",
+                                    headers: {
+                                        "Content-Type": "application/json",
+                                        "X-Banter-Token": window.BANTER_SAVE_TOKEN
+                                    },
+                                    body: JSON.stringify({
+                                        categoryId: category.id,
+                                        phraseId: phrase.id
+                                    })
+                                }
+                            );
+
+                            const deleteResult = await deleteResponse.json();
+
+                            if (!deleteResponse.ok || !deleteResult.ok) {
+                                throw new Error(
+                                    "The destination was saved, but the original " +
+                                    "could not be deleted. Both copies may now exist."
+                                );
+                            }
+
+                            usedPhrases.delete(phrase.id);
+                            await refreshCachedData([`data/${category.file}`]);
+                        }
+
+                        // Reload the current category from its saved JSON.
+                        await showPhrases(category);
+
+                    } catch (error) {
+                        console.error(
+                            "Banter: phrase copy/move failed",
+                            error
+                        );
+
+                        transferStatus.textContent = error.message ||
+                            "The operation could not be confirmed. Check both categories before retrying.";
+
+                        copyButton.disabled = false;
+                        moveButton.disabled = false;
+                        cancelTransferButton.disabled = false;
+                        destinationSelect.disabled = false;
+                    }
+                }
+
+                
+                // Keep the controls tidy until a destination is chosen.
+                const transferActions = document.createElement("div");
+                transferActions.className = "phrase-transfer-actions";
+                transferActions.hidden = true;
+
+                transferActions.appendChild(copyButton);
+                transferActions.appendChild(moveButton);
+                transferActions.appendChild(cancelTransferButton);
+
+                destinationSelect.addEventListener("change", () => {
+                    transferActions.hidden = !destinationSelect.value;
+                    transferStatus.textContent = "";
+                });
+                
+                copyButton.addEventListener("click", () => {
+                    transferPhrase(false);
+                });
+
+                moveButton.addEventListener("click", () => {
+                    transferPhrase(true);
+                });
+
+                cancelTransferButton.addEventListener("click", () => {
+                    transferControls.hidden = true;
+                });
+
+                transferControls.appendChild(transferActions);
+                transferControls.appendChild(transferStatus);
+                
+                phraseItem.appendChild(transferControls);
 
                 // Delete this phrase after confirmation.
                 const deleteButton = document.createElement("button");
