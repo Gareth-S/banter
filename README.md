@@ -2,7 +2,7 @@
 
 **A simple, offline-friendly PWA for live music performers.**
 
-Banter is a lightweight web app for keeping track of the things you want to say between songs — from introductions and guitar changes to birthdays, announcements, and the occasional joke.
+Banter is a lightweight web app for keeping track of the things you want to say between songs - from introductions and guitar changes to birthdays, announcements, and the occasional joke.
 
 Designed to be simple to use on a phone while performing, Banter keeps your prompts organised and close at hand, without needing an app store or a complicated setup.
 
@@ -13,7 +13,7 @@ Designed to be simple to use on a phone while performing, Banter keeps your prom
 - **Easy editing** — add, edit, reorder, move, or copy phrases when connected to the server.
 - **Bucket** — a permanent category for collecting phrases when deleting other categories.
 - **Light and dark themes** — choose whichever works best for your environment.
-- **Optional delay timer** — add a short pause before displaying the next prompt.
+- **Optional delay timer** — add a short pause before displaying returning to the categories.
 - **Progressive Web App (PWA)** — install it on a compatible device and access cached content when offline.
 
 ## Installation
