@@ -76,21 +76,27 @@ try {
     respond(400, ['ok' => false, 'error' => 'Invalid JSON']);
 }
 
+// The category name is mandatory; the description is optional.
 if (
     !is_array($submitted) ||
-    !isset($submitted['name'], $submitted['desc']) ||
+    !isset($submitted['name']) ||
     !is_string($submitted['name']) ||
-    !is_string($submitted['desc'])
+    (isset($submitted['desc']) && !is_string($submitted['desc']))
 ) {
-    respond(400, ['ok' => false, 'error' => 'Name and description are required']);
+    respond(400, ['ok' => false, 'error' => 'A valid category name is required']);
 }
 
+
+// An omitted or blank description is stored as an empty string.
 $name = trim($submitted['name']);
-$desc = trim($submitted['desc']);
+$desc = isset($submitted['desc'])
+    ? trim($submitted['desc'])
+    : '';
 
-if ($name === '' || $desc === '') {
-    respond(400, ['ok' => false, 'error' => 'Name and description cannot be empty']);
+if ($name === '') {
+    respond(400, ['ok' => false, 'error' => 'Category name cannot be empty']);
 }
+
 
 if (strlen($name) > 100 || strlen($desc) > 250) {
     respond(400, ['ok' => false, 'error' => 'Name or description is too long']);
